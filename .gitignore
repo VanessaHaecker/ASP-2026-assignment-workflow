@@ -7,3 +7,5 @@
 # R
 .Rhistory
 .RData
+
+.Renviron # for the Finnhub key 
