@@ -1,65 +1,148 @@
 #!/usr/bin/env Rscript
 
-# Project: ASML News  Analysis (Hard vs. Soft News)
-# Path: 01-asml-project/code/02-news-classification.R
+# ==============================================================================
+# PROJECT: ASML News Analysis - Hard vs. Soft News Classification
+# METHODOLOGY: Chain-of-Thought (CoT) prompting for enhanced transparency
+# ==============================================================================
+
+rm(list = ls()) 
+
+# 1 - Load Environment & Libraries ---------------------------------------------
+# Erhöhe das Timeout-Limit auf 20 Minuten, um Verbindungsabbrüche zu verhindern!
+options(timeout = 1200)
 
 if (!require("pacman")) install.packages("pacman"); library("pacman")
-p_load(ellmer)
-p_load(jsonlite)
-p_load(tidyverse)
-p_load(here)
+p_load(
+  ellmer,    # Interface for LLMs
+  jsonlite,  # Parsing JSON responses
+  tidyverse, # Data manipulation, includes stringr for robust regex
+  here       # Path management
+)
 
-# 1 - Projekt-Setup (Pfade fixieren)
 here::i_am("01-asml-project/code/02-news-classification.R")
 root <- here::here()
 
 input_dir  <- file.path(root, "01-asml-project", "input")
 output_dir <- file.path(root, "01-asml-project", "output")
 
-# 2 - Daten laden
-news_data <- read_csv(file.path(input_dir, "asml_news_headlines.csv"))
+# 2 - Data Loading -------------------------------------------------------------
+news_file <- file.path(input_dir, "asml_news_headlines.csv")
 
-# 3 - LLM Setup (Ollama statt OpenRouter)
-# Definiere das Schema direkt im System Prompt wie in deinem Kurs-Beispiel
-system_prompt = "You are a financial economist. You only respond to the exact question I ask and your response is valid JSON. 
-The JSON response should have the following schema: { 'headline': [string], 'category': ['Hard', 'Soft'], 'reasoning': [string] }.
-'Hard' news are quantitative, verifiable facts (earnings, orders). 'Soft' news are qualitative (opinions, rumors, sentiment)."
+if (!file.exists(news_file)) {
+  stop("Input data missing! Please run '01-data-collection.R' first.")
+}
 
-chat_asml = chat_ollama(
-  model = "llama3.2", # Stelle sicher, dass dieses Modell geladen ist: ollama pull llama3.2
+news_data <- read_csv(news_file)
+
+# 3 - LLM Configuration & Prompt Engineering -----------------------------------
+# 3 - LLM Configuration & Prompt Engineering -----------------------------------
+system_prompt <- "You are a highly precise, strictly JSON-only financial text classification API. 
+You output ONLY a valid JSON array of objects. No markdown, no conversational text, no preambles.
+
+TASK: Classify the provided financial news headlines about ASML into 'Hard' or 'Soft' information.
+
+DEFINITIONS & EDGE CASES:
+- HARD: Quantitative, objective, and verifiable company facts. 
+  Examples: Official company earnings reports, concrete order numbers, dividend announcements, exact revenue figures.
+- SOFT: Qualitative, interpretive, subjective, or forward-looking information.
+  Examples: Analyst ratings/reports (e.g., 'Analyst upgrades ASML'), market sentiment, macroeconomic speculation, rumors, and industry forecasts.
+  CRITICAL RULE ON 'REPORTS': An official ASML financial/earnings report is HARD. An analyst, media, or industry report *about* ASML is SOFT.
+
+OUTPUT FORMAT:
+Return EXACTLY this JSON structure for EVERY headline provided, wrapped in ONE array:
+[
+  {
+    \"headline\": \"[Insert exact headline]\",
+    \"category\": \"Hard\" or \"Soft\",
+    \"reasoning\": \"[Strictly one short sentence explaining why based on the definitions]\"
+  }
+]
+
+FAILURE TO RETURN PURE JSON WILL BREAK THE SYSTEM."
+
+chat_asml <- chat_ollama(
+  model = "llama3-fixed", 
   system_prompt = system_prompt
 )
 
-# 4 - Klassifizierung durchführen
-# Wir erstellen eine Liste, um die Ergebnisse zu speichern
-results_list = list()
+# ==============================================================================
+# 4 - Reproducible Batch Classification Loop with Robust Parsing & Sanitization
+# ==============================================================================
 
-# Wir gehen die Schlagzeilen durch (zum Testen erst einmal nur die ersten 10)
-# Entferne [1:10], um alle zu klassifizieren
-for (i in 1:nrow(news_data[1:10, ])) {
+set.seed(42) 
+batch_size <- 5 
+batches <- split(news_data, (seq_len(nrow(news_data)) - 1) %/% batch_size)
+
+results_list <- list()
+
+message(paste("Starte bereinigte Klassifizierung für", nrow(news_data), "Schlagzeilen in", length(batches), "Paketen..."))
+
+for (i in seq_along(batches)) {
+  current_batch <- batches[[i]]
   
-  headline_to_check = news_data$headline[i]
+  # DIE RETTUNG: Wir ersetzen doppelte Anführungszeichen durch einfache.
+  # Außerdem entfernen wir Zeilenumbrüche, falls welche in den Headlines stecken.
+  safe_headlines <- stringr::str_replace_all(current_batch$headline, '\"', "'")
+  safe_headlines <- stringr::str_replace_all(safe_headlines, "[\r\n]", " ")
   
-  message(paste("Verarbeite Zeile:", i))
+  batch_prompt <- paste(
+    "Classify the following headlines as a JSON array of objects. Return ONLY the array:",
+    paste(shQuote(safe_headlines), collapse = ", ")
+  )
   
-  # Chat-Abfrage
-  response = chat_asml$chat(paste0("Classify the following ASML news headline: ", headline_to_check))
+  message(paste("Verarbeite Paket", i, "von", length(batches)))
   
-  # Parse JSON (wie im Kurs-Beispiel)
-  response_json = fromJSON(response)
+  response <- chat_asml$chat(batch_prompt)
   
-  # Füge das Datum aus den Originaldaten hinzu
-  response_json$date = news_data$date[i]
+  batch_result <- tryCatch({
+    json_match <- stringr::str_extract(response, stringr::regex("\\[.*\\]", dotall = TRUE))
+    
+    if(is.na(json_match)) stop("Kein Array gefunden.")
+    
+    res_df <- jsonlite::fromJSON(json_match, simplifyVector = TRUE) %>% as.data.frame()
+    
+    if(!all(c("headline", "category", "reasoning") %in% colnames(res_df))) {
+      stop("Spalten fehlen.")
+    }
+    
+    res_df <- res_df %>% select(headline, category, reasoning)
+    n_returned <- min(nrow(res_df), nrow(current_batch))
+    
+    res_df <- res_df[1:n_returned, ] 
+    res_df$date <- current_batch$date[1:n_returned]
+    
+    res_df
+    
+  }, error = function(e) {
+    message(paste("!!! Fehler in Paket", i, "-", e$message))
+    data.frame(
+      headline = current_batch$headline,
+      category = "Error",
+      reasoning = "Parsing failed",
+      date = current_batch$date,
+      stringsAsFactors = FALSE
+    )
+  })
   
-  # Speichere in der Liste
-  results_list[[i]] = as.data.frame(response_json)
+  results_list[[i]] <- batch_result
+  write_csv(bind_rows(results_list), file.path(input_dir, "asml_news_partial.csv"))
 }
 
-# 5 - Ergebnisse zusammenführen und speichern
+# ==============================================================================
+# 5 - Datenexport & Filterung für den Bericht
+# ==============================================================================
+
 news_classified <- bind_rows(results_list)
 
-# Speichere die Ergebnisse im 'input' Ordner für das finale Skript
-write_csv(news_classified, file.path(input_dir, "asml_news_classified.csv"))
+full_output <- news_classified %>% select(date, headline, category)
+write_csv(full_output, file.path(input_dir, "asml_news_classified.csv"))
 
-print("Klassifizierung abgeschlossen!")
-print(head(news_classified))
+report_appendix <- news_classified %>%
+  filter(category != "Error") %>%
+  slice_sample(n = min(30, sum(news_classified$category != "Error"))) %>% 
+  select(category, headline, reasoning)
+
+write_csv(report_appendix, file.path(output_dir, "llm_reasoning_report.csv"))
+
+message("Klassifizierung abgeschlossen!")
+
