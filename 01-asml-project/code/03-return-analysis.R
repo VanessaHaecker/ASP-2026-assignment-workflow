@@ -1,129 +1,135 @@
 #!/usr/bin/env Rscript
-# ==============================================================================
-# Script 03: ASML Return Analysis (EMH Test)
+
+# Project: ASML News Analysis (Hard vs. Soft News)
+# Script 03: ASML Return Analysis (Volatility / Absolute Returns)
 # Path: 01-asml-project/code/03-return-analysis.R
+
+rm(list = ls()) # Clear the environment
+
 # ==============================================================================
+# 1 - Load necessary libraries
+# ==============================================================================
+if (!require("pacman")) install.packages("pacman"); library("pacman")
 
-library(tidyverse)
-library(here)
+pacman::p_load(
+  tidyverse,  # For tidy data manipulation
+  scales,     # For percentage formatting in plots
+  here        # For project structure management
+)
 
-# Pfad-Setup für Reproduzierbarkeit
+# Path setup for reproducibility
 here::i_am("01-asml-project/code/03-return-analysis.R")
 
-# ==============================================================================
-# 1 - Daten laden
-# ==============================================================================
-prices <- read_csv(here("01-asml-project/input/asml_prices.csv"))
+# Define the root ONLY ONCE at the beginning of the script
+root <- here::here()
 
-# WICHTIG: Wir laden die fehlerfrei reparierte FINAL-Datei
-news   <- read_csv(here("01-asml-project/input/asml_news_classified_FINAL.csv"))
+# Define relative paths for the project structure
+input_dir  <- file.path(root, "01-asml-project", "input")
+output_dir <- file.path(root, "01-asml-project", "output")
 
 # ==============================================================================
-# 2 - Daten auf Tagesebene aggregieren
+# 2 - Load data
 # ==============================================================================
-# Wir bestimmen für jeden Tag, ob Hard oder Soft News dominiert haben
+prices <- read_csv(file.path(input_dir, "asml_prices.csv"))
+news   <- read_csv(file.path(input_dir, "asml_news_classified_FINAL.csv"))
+
+# ==============================================================================
+# 3 - Aggregate data at daily level (CORRECTED LOGIC)
+# ==============================================================================
 daily_news_summary <- news %>%
-  filter(category != "Error") %>% # Nur zur Sicherheit
+  mutate(category = str_trim(category)) %>% 
+  filter(category %in% c("Hard", "Soft")) %>% 
   group_by(date) %>%
   summarise(
-    hard_count = sum(category == "Hard"),
-    soft_count = sum(category == "Soft"),
-    # Zuordnung: Der Typ mit den meisten Meldungen gewinnt (Bei Gleichstand: Hard)
-    main_info_type = ifelse(hard_count >= soft_count, "Hard", "Soft")
-  )
+    hard_count = sum(category == "Hard", na.rm = TRUE),
+    soft_count = sum(category == "Soft", na.rm = TRUE),
+    total_news = hard_count + soft_count,
+    
+    # Clean assignment without false 'tie preference'
+    main_info_type = case_when(
+      hard_count > soft_count ~ "Hard",
+      soft_count > hard_count ~ "Soft",
+      hard_count == soft_count & total_news > 0 ~ "Mixed", 
+      TRUE ~ "None"
+    )
+  ) %>%
+  # Keep only relevant days
+  filter(main_info_type %in% c("Hard", "Soft", "Mixed"))
 
 # ==============================================================================
-# 3 - Merge mit den Aktiendaten
+# 4 - Merge with stock data
 # ==============================================================================
 analysis_data <- prices %>%
   inner_join(daily_news_summary, by = "date") %>%
-  mutate(abs_return = abs(daily_return)) # Absolute Rendite als Maß für Volatilität
+  mutate(abs_return = abs(daily_return)) # Absolute return as a measure of volatility
 
 # ==============================================================================
-# 4 - Statistische Auswertung (Deskriptiv)
+# 5 - Statistical Evaluation (Descriptive)
 # ==============================================================================
+cat("\n=== Descriptive Statistics: Volatility by News Type ===\n")
 stats_summary <- analysis_data %>%
   group_by(main_info_type) %>%
   summarise(
     n_days = n(),
     avg_volatility = mean(abs_return, na.rm = TRUE),
     sd_volatility = sd(abs_return, na.rm = TRUE)
-  )
+  ) %>%
+  arrange(desc(n_days))
 
-print("=== Deskriptive Statistik ===")
 print(stats_summary)
 
 # ==============================================================================
-# 5 - Visualisierung: Boxplot der Volatilität
+# 6 - Visualizations
 # ==============================================================================
-plot <- ggplot(analysis_data, aes(x = main_info_type, y = abs_return, fill = main_info_type)) +
+# Define uniform color palette (including Mixed)
+custom_colors <- c("Hard" = "#e74c3c", "Soft" = "#3498db", "Mixed" = "#95a5a6")
+
+# --- A) Boxplot of Volatility ---
+plot_box <- ggplot(analysis_data, aes(x = main_info_type, y = abs_return, fill = main_info_type)) +
   geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 8) +
   theme_minimal() +
-  scale_fill_manual(values = c("Hard" = "#2c3e50", "Soft" = "#3498db")) +
+  scale_fill_manual(values = custom_colors) +
+  scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
-    title = "Marktreaktion: Hard vs. Soft News (ASML)",
-    subtitle = "Absolute tägliche Renditen als Maß für Informationsverarbeitung",
-    x = "Nachrichtentyp",
-    y = "Absolute Rendite (Volatilität)",
-    fill = "Kategorie"
+    title = "Market Reaction: Hard vs. Soft News (ASML)",
+    subtitle = "Absolute daily returns as a measure of information processing",
+    x = "Dominant News Type",
+    y = "Absolute Return (Volatility)",
+    fill = "Category"
   )
 
-# Grafik speichern für das Dokument
-ggsave(here("01-asml-project/output/asml_volatility_comparison.png"), plot = plot, width = 8, height = 6)
-print("Grafik 'asml_volatility_comparison.png' im Output-Ordner gespeichert.")
+# Display plot in VS Code
+print(plot_box)
 
-# ==============================================================================
-# 6 - Statistische Signifikanztests (Inferenzstatistik)
-# ==============================================================================
+# Save graphic in high resolution
+ggsave(
+  filename = file.path(output_dir, "asml_volatility_comparison.png"), 
+  plot = plot_box, 
+  device = "png",
+  width = 8, 
+  height = 6, 
+  units = "in",
+  dpi = 300
+)
+print("Graphic 'asml_volatility_comparison.png' saved in output folder.")
 
-cat("\n=== Welch's T-Test (Vergleich der Mittelwerte) ===\n")
-t_test_result <- t.test(abs_return ~ main_info_type, data = analysis_data)
-print(t_test_result)
-
-cat("\n=== Wilcoxon Rank-Sum Test (Robust gegen Ausreißer) ===\n")
-wilcox_result <- wilcox.test(abs_return ~ main_info_type, data = analysis_data)
-print(wilcox_result)
-
-cat("\n=== Regressionsmodell (OLS) ===\n")
-# Umwandlung in Dummy: 1 wenn Hard, 0 wenn Soft
-analysis_data <- analysis_data %>%
-  mutate(hard_dummy = ifelse(main_info_type == "Hard", 1, 0))
-
-regression_model <- lm(abs_return ~ hard_dummy, data = analysis_data)
-summary(regression_model) %>% print()
-
-
-
-
-# ==============================================================================
-## ==============================================================================
-# 5 - Visualisierung: Zeitreihe der Volatilität (Absolute Renditen)
-# ==============================================================================
-
-library(scales)
-
+# --- B) Time series of volatility ---
 plot_ts <- ggplot(analysis_data, aes(x = date)) +
-  # 1. Die farbigen Hintergründe für jeden Tag (Hard vs. Soft)
   geom_rect(aes(xmin = date - 0.5, xmax = date + 0.5, 
                 ymin = 0, ymax = Inf, fill = main_info_type), 
             alpha = 0.3) +
-  
-  # 2. Die eigentliche Zeitreihe der ABSOLUTEN Renditen (Volatilität)
   geom_line(aes(y = abs_return), color = "#2c3e50", linewidth = 1) +
   geom_point(aes(y = abs_return), color = "#2c3e50", size = 2.5) +
-  
-  # 3. Optische Anpassungen
-  scale_fill_manual(values = c("Hard" = "#e74c3c", "Soft" = "#3498db")) +
-  # y-Achse bei 0 beginnen lassen, da absolute Zahlen nicht negativ sein können
+  scale_fill_manual(values = custom_colors) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, NA)) +
   scale_x_date(date_labels = "%b %d", date_breaks = "1 week") +
   theme_minimal() +
   labs(
-    title = "ASML Volatilität: Hard vs. Soft News",
-    subtitle = "Absolute tägliche Renditen zeigen die Intensität der Informationsverarbeitung",
-    x = "Datum",
-    y = "Volatilität (Absolute Rendite)",
-    fill = "Dominante News"
+    title = "ASML Volatility: Hard vs. Soft News",
+    subtitle = "Absolute daily returns show the intensity of information processing",
+    x = "Date",
+    y = "Volatility (Absolute Return)",
+    fill = "Dominant News"
   ) +
   theme(
     legend.position = "bottom",
@@ -131,45 +137,65 @@ plot_ts <- ggplot(analysis_data, aes(x = date)) +
     plot.title = element_text(face = "bold")
   )
 
-# Grafik speichern
-ggsave(here("01-asml-project/output/asml_volatility_timeseries.png"), plot = plot_ts, width = 10, height = 5)
-print("Grafik 'asml_volatility_timeseries.png' im Output-Ordner gespeichert.")
+print(plot_ts)
 
-# mit blakendiagramm 
+ggsave(
+  filename = file.path(output_dir, "asml_volatility_timeseries.png"), 
+  plot = plot_ts, 
+  device = "png",
+  width = 10, 
+  height = 5, 
+  units = "in",
+  dpi = 300
+)
+print("Graphic 'asml_volatility_timeseries.png' saved in output folder.")
 
-# ==============================================================================
-# 5 - Visualisierung: Balkendiagramm der Volatilität (Absolute Renditen)
-# ==============================================================================
-
-library(scales)
-
+# --- C) Bar chart of volatility shocks ---
 plot_bar <- ggplot(analysis_data, aes(x = date, y = abs_return, fill = main_info_type)) +
-  # 1. Balkendiagramm für isolierte Tages-Schocks
   geom_col(width = 0.6, alpha = 0.85) +
-  
-  # 2. Eine Basislinie (Nulllinie) zur optischen Erdung
   geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
-  
-  # 3. Optische Anpassungen für ein sauberes, akademisches Layout
-  scale_fill_manual(values = c("Hard" = "#e74c3c", "Soft" = "#3498db")) +
-  # expand = c(0,0) sorgt dafür, dass die Balken direkt auf der Linie stehen
+  scale_fill_manual(values = custom_colors) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), expand = expansion(mult = c(0, 0.1))) +
   scale_x_date(date_labels = "%b %d", date_breaks = "1 week") +
   theme_minimal() +
   labs(
-    title = "ASML Volatilitäts-Schocks: Hard vs. Soft News",
-    subtitle = "Tägliche absolute Renditen visualisiert als isolierte Marktreaktionen",
-    x = "Datum",
-    y = "Volatilität (Absolute Rendite)",
-    fill = "Dominante News"
+    title = "ASML Volatility Shocks: Hard vs. Soft News",
+    subtitle = "Daily absolute returns visualized as isolated market reactions",
+    x = "Date",
+    y = "Volatility (Absolute Return)",
+    fill = "Dominant News"
   ) +
   theme(
     legend.position = "bottom",
     panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank(), # Entfernt vertikale Gitternetzlinien für mehr Klarheit
+    panel.grid.major.x = element_blank(),
     plot.title = element_text(face = "bold")
   )
 
-# Grafik speichern
-ggsave(here("01-asml-project/output/asml_volatility_bars.png"), plot = plot_bar, width = 10, height = 5)
-print("Grafik 'asml_volatility_bars.png' im Output-Ordner gespeichert.")
+print(plot_bar)
+
+ggsave(
+  filename = file.path(output_dir, "asml_volatility_bars.png"), 
+  plot = plot_bar, 
+  device = "png",
+  width = 10, 
+  height = 5, 
+  units = "in",
+  dpi = 300
+)
+print("Graphic 'asml_volatility_bars.png' saved in output folder.")
+
+# ==============================================================================
+# 7 - Extra Check: Which days were "Mixed" and what was the return?
+# ==============================================================================
+cat("\n=== Detailed view: Days with 'Mixed' News ===\n")
+
+mixed_news_check <- analysis_data %>%
+  # Filter only Mixed days
+  filter(main_info_type == "Mixed") %>%
+  # Select relevant columns for a clear table
+  select(date, hard_count, soft_count, daily_return, abs_return) %>%
+  # Sort by date
+  arrange(date)
+
+print(mixed_news_check)
