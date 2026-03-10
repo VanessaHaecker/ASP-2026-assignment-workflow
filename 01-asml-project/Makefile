@@ -3,7 +3,13 @@
 # Data collection (Script 01) and LLM classification (Script 02 & 02b) are highly 
 # compute- and time-intensive. Script 01 requires a live Finnhub API key, and 
 # Script 02 uses a local LLM (Ollama/LLaMA3) which took approximately 5 hours to run.
-# All processed and classified datasets are safely stored in the 'input/' directory.
+# REPRODUCIBILITY NOTICE:
+# The Finnhub live API dynamically updates its historical news feed (e.g., removing 
+# duplicates, altering timestamps), and LLM outputs have inherent stochasticity. 
+# Therefore, running Scripts 01 and 02 again will result in slight data discrepancies. 
+# To guarantee strict scientific reproducibility of the final analysis and plots, 
+# a frozen snapshot of the original, classified dataset is safely stored in the 
+# 'input/' directory. Please rely on this static dataset for grading.
 
 # --- MASTER LIST OF GOALS ---
 # This only triggers the fast, reproducible analysis scripts (03 & 04).
