@@ -1,13 +1,18 @@
 #!/usr/bin/env Rscript
-# ==============================================================================
-# Script 02b: Error Recovery (Single-Shot) - OHNE Überschreiben der Originaldaten
-# ==============================================================================
 
-library(tidyverse)
-library(ellmer)
-library(jsonlite)
-library(stringr)
-library(here)
+# Project: ASML News Analysis (Hard vs. Soft News)
+# Script 02b: Error Recovery (Single-Shot) - without modifying the original file, but creating a new one with the repaired data
+# reason for this script: the LLM is very strict with the output format, and any deviation (e.g., a single line of non-JSON text) breaks the entire classification process. This script identifies the error lines, sends them one by one to the LLM for reclassification, and creates a new file with the repaired categories.
+
+# 1 - Load necessary libraries
+if (!require("pacman")) install.packages("pacman"); library("pacman")
+
+p_load(
+  tidyverse, # Data manipulation & stringr (for text cleaning)
+  ellmer,    # Interface for LLMs
+  jsonlite,  # Parsing JSON responses
+  here       # Path management
+)
 
 options(timeout = 1200)
 
@@ -15,18 +20,17 @@ here::i_am("01-asml-project/code/02b-error-recovery.R")
 root <- here::here()
 input_dir <- file.path(root, "01-asml-project", "input")
 
-# 1. Lade die Datei mit den Error-Zeilen (Wird NICHT verändert)
+# 1 - Load the partially classified data with errors
 data_file <- file.path(input_dir, "asml_news_partial.csv")
 df <- read_csv(data_file)
 
-# 2. Finde die fehlerhaften Zeilen
+# 2 - Identify rows where the category is "Error" (indicating a parsing failure)
 error_indices <- which(df$category == "Error")
 message(paste("Gefundene Fehlerzeilen:", length(error_indices)))
 
 if (length(error_indices) > 0) {
   
-  # 3. LLM Setup (Single-Shot Prompt)
-  # 3. LLM Setup (Identisch zum Hauptskript, nur Output-Format auf Single-JSON geändert)
+  # 3 - LLM Setup (Single-Shot Prompting for each headline)
   system_prompt_single <- "You are a highly precise, strictly JSON-only financial text classification API. 
 You output ONLY a valid JSON object. No markdown, no conversational text, no preambles.
 
@@ -54,7 +58,7 @@ FAILURE TO RETURN PURE JSON WILL BREAK THE SYSTEM."
     system_prompt = system_prompt_single
   )
   
-  # 4. Repariere jede Zeile einzeln im Arbeitsspeicher
+  # 4 - Loop through each error line, send the headline to the LLM, and attempt to repair the category
   for (i in error_indices) {
     headline_to_check <- df$headline[i]
     message(paste("Repariere Zeile", i, ":", str_trunc(headline_to_check, 40)))
@@ -77,12 +81,12 @@ FAILURE TO RETURN PURE JSON WILL BREAK THE SYSTEM."
     })
   }
   
-  # 5. Speichern in KOMPLETT NEUEN Dateien (Original bleibt unangetastet)
+  # 5 - Save the repaired dataset to a new file (both the full version with reasoning and a clean version for analysis)
   
-  # A) Neue Datei 1: Der reparierte Komplett-Datensatz inkl. Reasoning (fürs Archiv)
+  # A) New file 1: Full version with reasoning
   write_csv(df, file.path(input_dir, "asml_news_FULL_recovered.csv"))
   
-  # B) Neue Datei 2: Die saubere Version für Skript 03 (nur Datum, Headline, Kategorie)
+  # B) New file 2: Clean version for analysis (only date, headline, and repaired category)
   final_analysis_data <- df %>% select(date, headline, category)
   write_csv(final_analysis_data, file.path(input_dir, "asml_news_classified_FINAL.csv"))
   

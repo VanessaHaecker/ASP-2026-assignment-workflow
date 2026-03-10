@@ -1,31 +1,30 @@
 #!/usr/bin/env Rscript
 
-# ==============================================================================
-# PROJECT: ASML News Analysis - Hard vs. Soft News Classification
-# METHODOLOGY: Chain-of-Thought (CoT) prompting for enhanced transparency
-# ==============================================================================
+# PROJECT: ASML News Analysis (Hard vs. Soft News)
+# Script 02: ASML News Classification (Chain-of-Thought Prompting)
 
 rm(list = ls()) 
 
-# 1 - Load Environment & Libraries ---------------------------------------------
-# Erhöhe das Timeout-Limit auf 20 Minuten, um Verbindungsabbrüche zu verhindern!
+# 1 - Load Environment & Libraries
+# Set the timeout limit to 20 minutes to prevent connection interruptions
 options(timeout = 1200)
 
 if (!require("pacman")) install.packages("pacman"); library("pacman")
 p_load(
   ellmer,    # Interface for LLMs
   jsonlite,  # Parsing JSON responses
-  tidyverse, # Data manipulation, includes stringr for robust regex
+  tidyverse, # Data manipulation
   here       # Path management
 )
 
 here::i_am("01-asml-project/code/02-news-classification.R")
 root <- here::here()
 
+# 2 - Define relative paths for the project structure
 input_dir  <- file.path(root, "01-asml-project", "input")
 output_dir <- file.path(root, "01-asml-project", "output")
 
-# 2 - Data Loading -------------------------------------------------------------
+# 3 - Data Loading
 news_file <- file.path(input_dir, "asml_news_headlines.csv")
 
 if (!file.exists(news_file)) {
@@ -34,8 +33,7 @@ if (!file.exists(news_file)) {
 
 news_data <- read_csv(news_file)
 
-# 3 - LLM Configuration & Prompt Engineering -----------------------------------
-# 3 - LLM Configuration & Prompt Engineering -----------------------------------
+# 4 - LLM Configuration & Prompt Engineering
 system_prompt <- "You are a highly precise, strictly JSON-only financial text classification API. 
 You output ONLY a valid JSON array of objects. No markdown, no conversational text, no preambles.
 
@@ -65,9 +63,7 @@ chat_asml <- chat_ollama(
   system_prompt = system_prompt
 )
 
-# ==============================================================================
-# 4 - Reproducible Batch Classification Loop with Robust Parsing & Sanitization
-# ==============================================================================
+# 5 - Batch Classification Loop with Robust Parsing & Sanitization
 
 set.seed(42) 
 batch_size <- 5 
@@ -80,8 +76,7 @@ message(paste("Starte bereinigte Klassifizierung für", nrow(news_data), "Schlag
 for (i in seq_along(batches)) {
   current_batch <- batches[[i]]
   
-  # DIE RETTUNG: Wir ersetzen doppelte Anführungszeichen durch einfache.
-  # Außerdem entfernen wir Zeilenumbrüche, falls welche in den Headlines stecken.
+  # Sanitize headlines to prevent JSON parsing issues (e.g., unescaped quotes, newlines)
   safe_headlines <- stringr::str_replace_all(current_batch$headline, '\"', "'")
   safe_headlines <- stringr::str_replace_all(safe_headlines, "[\r\n]", " ")
   
@@ -128,9 +123,8 @@ for (i in seq_along(batches)) {
   write_csv(bind_rows(results_list), file.path(input_dir, "asml_news_partial.csv"))
 }
 
-# ==============================================================================
-# 5 - Datenexport & Filterung für den Bericht
-# ==============================================================================
+
+# 6 - Combine Results, Save Output, and Generate Report Appendix
 
 news_classified <- bind_rows(results_list)
 

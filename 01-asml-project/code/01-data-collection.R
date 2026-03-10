@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 
 # Project: ASML News  Analysis (Hard vs. Soft News)
-# Path: 01-asml-project/code/01-data-collection.R
+# Script 01: ASML Data Collection (Stock Prices & News Headlines)
 
-rm(list = ls()) # Clear the environment
+rm(list = ls())
 
 
 
@@ -24,8 +24,8 @@ pacman::p_load(
 )
 
 here::i_am("01-asml-project/code/01-data-collection.R")
-# Am Anfang des Skripts EINMALIG die Wurzel festlegen
 root <- here::here()
+
 # 2 - Define relative paths for the project structure
 input_dir  <- file.path(root, "01-asml-project", "input")
 temp_dir   <- file.path(root, "01-asml-project", "temp")
@@ -130,7 +130,7 @@ news_data <- content(response, as = "text", encoding = "UTF-8") %>%
     datetime = as_datetime(datetime),
     date     = as.Date(datetime)
   ) %>%
-  # Reproducibility check: Ensure data is strictly within the window
+  # Ensure data is strictly within the window
   filter(date >= start_date & date <= end_date) %>%
   select(date, datetime, headline, summary, source) %>%
   arrange(desc(datetime))

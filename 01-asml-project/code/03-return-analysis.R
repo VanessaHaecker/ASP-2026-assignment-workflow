@@ -2,13 +2,11 @@
 
 # Project: ASML News Analysis (Hard vs. Soft News)
 # Script 03: ASML Return Analysis (Volatility / Absolute Returns)
-# Path: 01-asml-project/code/03-return-analysis.R
 
-rm(list = ls()) # Clear the environment
+rm(list = ls()) 
 
-# ==============================================================================
 # 1 - Load necessary libraries
-# ==============================================================================
+
 if (!require("pacman")) install.packages("pacman"); library("pacman")
 
 pacman::p_load(
@@ -17,25 +15,21 @@ pacman::p_load(
   here        # For project structure management
 )
 
-# Path setup for reproducibility
-here::i_am("01-asml-project/code/03-return-analysis.R")
 
-# Define the root ONLY ONCE at the beginning of the script
+here::i_am("01-asml-project/code/03-return-analysis.R")
 root <- here::here()
 
 # Define relative paths for the project structure
 input_dir  <- file.path(root, "01-asml-project", "input")
 output_dir <- file.path(root, "01-asml-project", "output")
 
-# ==============================================================================
 # 2 - Load data
-# ==============================================================================
+
 prices <- read_csv(file.path(input_dir, "asml_prices.csv"))
 news   <- read_csv(file.path(input_dir, "asml_news_classified_FINAL.csv"))
 
-# ==============================================================================
-# 3 - Aggregate data at daily level (CORRECTED LOGIC)
-# ==============================================================================
+# 3 - Aggregate data at daily level to determine the dominant news type per day
+
 daily_news_summary <- news %>%
   mutate(category = str_trim(category)) %>% 
   filter(category %in% c("Hard", "Soft")) %>% 
@@ -45,7 +39,7 @@ daily_news_summary <- news %>%
     soft_count = sum(category == "Soft", na.rm = TRUE),
     total_news = hard_count + soft_count,
     
-    # Clean assignment without false 'tie preference'
+    # Determine the dominant news type for the day, with a tie-breaker for "Mixed"
     main_info_type = case_when(
       hard_count > soft_count ~ "Hard",
       soft_count > hard_count ~ "Soft",
@@ -53,19 +47,19 @@ daily_news_summary <- news %>%
       TRUE ~ "None"
     )
   ) %>%
-  # Keep only relevant days
+  
   filter(main_info_type %in% c("Hard", "Soft", "Mixed"))
 
-# ==============================================================================
+
 # 4 - Merge with stock data
-# ==============================================================================
+
 analysis_data <- prices %>%
   inner_join(daily_news_summary, by = "date") %>%
   mutate(abs_return = abs(daily_return)) # Absolute return as a measure of volatility
 
-# ==============================================================================
-# 5 - Statistical Evaluation (Descriptive)
-# ==============================================================================
+
+# 5 - Descriptive statistics: volatility by news type
+
 cat("\n=== Descriptive Statistics: Volatility by News Type ===\n")
 stats_summary <- analysis_data %>%
   group_by(main_info_type) %>%
@@ -78,13 +72,12 @@ stats_summary <- analysis_data %>%
 
 print(stats_summary)
 
-# ==============================================================================
+
 # 6 - Visualizations
-# ==============================================================================
 # Define uniform color palette (including Mixed)
 custom_colors <- c("Hard" = "#e74c3c", "Soft" = "#3498db", "Mixed" = "#95a5a6")
 
-# --- A) Boxplot of Volatility ---
+# A) Boxplot of Volatility
 plot_box <- ggplot(analysis_data, aes(x = main_info_type, y = abs_return, fill = main_info_type)) +
   geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 8) +
   theme_minimal() +
@@ -113,7 +106,7 @@ ggsave(
 )
 print("Graphic 'asml_volatility_comparison.png' saved in output folder.")
 
-# --- B) Time series of volatility ---
+# B) Time series of volatility
 plot_ts <- ggplot(analysis_data, aes(x = date)) +
   geom_rect(aes(xmin = date - 0.5, xmax = date + 0.5, 
                 ymin = 0, ymax = Inf, fill = main_info_type), 
@@ -150,7 +143,7 @@ ggsave(
 )
 print("Graphic 'asml_volatility_timeseries.png' saved in output folder.")
 
-# --- C) Bar chart of volatility shocks ---
+# C) Bar chart of volatility shocks
 plot_bar <- ggplot(analysis_data, aes(x = date, y = abs_return, fill = main_info_type)) +
   geom_col(width = 0.6, alpha = 0.85) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.8) +
@@ -185,9 +178,8 @@ ggsave(
 )
 print("Graphic 'asml_volatility_bars.png' saved in output folder.")
 
-# ==============================================================================
 # 7 - Extra Check: Which days were "Mixed" and what was the return?
-# ==============================================================================
+
 cat("\n=== Detailed view: Days with 'Mixed' News ===\n")
 
 mixed_news_check <- analysis_data %>%
