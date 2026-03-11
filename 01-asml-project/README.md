@@ -18,7 +18,7 @@ To ensure a seamless and reproducible grading experience without risking API tim
 
 ## Methodology
 1. **Data Collection**: Sourced 30 days of ASML stock price data (Yahoo Finance) and company news headlines (Finnhub API).
-2. **Classification (Chain-of-Thought)**: Employed a strictly prompted LLaMA3 model to categorize each headline as either 'Hard' or 'Soft' news based on objective financial definitions. For reproducibility, classification used a local Llama 3.2 instance with temperature fixed at 0.0 via a custom Ollama Modelfile.
+2. **Classification**: Employed a strictly prompted LLaMA3 model to categorize each headline as either 'Hard' or 'Soft' news based on objective financial definitions. For reproducibility, classification used a local Llama 3.2 instance with temperature fixed at 0.0 via a custom Ollama Modelfile.
 3. **Volatility & Directional Analysis**: Merged the daily dominant news category with ASML's daily stock returns to measure absolute volatility and directional magnitude.
 
 ## Key Findings
