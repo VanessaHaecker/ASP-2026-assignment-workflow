@@ -85,9 +85,8 @@ plot_box <- ggplot(analysis_data, aes(x = main_info_type, y = abs_return, fill =
   scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
     title = "Market Reaction: Hard vs. Soft News (ASML)",
-    subtitle = "Absolute daily returns",
     x = "Dominant News Type",
-    y = "Absolute Return (Volatility)",
+    y = "Daily Absolute Return",
     fill = "Category"
   )
 
@@ -118,10 +117,10 @@ plot_ts <- ggplot(analysis_data, aes(x = date)) +
   scale_x_date(date_labels = "%b %d", date_breaks = "1 week") +
   theme_minimal() +
   labs(
-    title = "ASML Volatility: Hard vs. Soft News",
+    title = "ASML Time Series Daily Absolute Returns: Hard vs. Soft News",
     subtitle = "Absolute daily returns",
     x = "Date",
-    y = "Volatility (Absolute Return)",
+    y = "Daily Absolute Return",
     fill = "Dominant News"
   ) +
   theme(
@@ -153,9 +152,8 @@ plot_bar <- ggplot(analysis_data, aes(x = date, y = abs_return, fill = main_info
   theme_minimal() +
   labs(
     title = "Absolute Daily Returns over Time by Dominant News Type",
-    subtitle = "Daily absolute returns",
     x = "Date",
-    y = "Volatility (Absolute Return)",
+    y = "Daily Absolute Return",
     fill = "Dominant News"
   ) +
   theme(
@@ -191,4 +189,5 @@ mixed_news_check <- analysis_data %>%
   arrange(date)
 
 print(mixed_news_check)
+
 
