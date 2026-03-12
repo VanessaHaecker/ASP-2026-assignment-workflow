@@ -23,4 +23,4 @@ To ensure a seamless and reproducible grading experience without risking API tim
 
 ## Key Findings
 * **Volume**: The news cycle was heavily dominated by Soft News (14 days) compared to Hard News (2 days).
-* **Volatility**: Interestingly, Soft News days exhibited a higher average volatility (2.15%) than Hard News days (1.26%), suggesting that speculation and analyst sentiment drove significant market reactions during this specific timeframe.
+* **Volatility**: Soft News days exhibited a higher average volatility (2.15%) than Hard News days (1.26%). 
