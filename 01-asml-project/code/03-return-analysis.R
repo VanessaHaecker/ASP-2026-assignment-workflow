@@ -85,7 +85,7 @@ plot_box <- ggplot(analysis_data, aes(x = main_info_type, y = abs_return, fill =
   scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
     title = "Market Reaction: Hard vs. Soft News (ASML)",
-    subtitle = "Absolute daily returns as a measure of information processing",
+    subtitle = "Absolute daily returns",
     x = "Dominant News Type",
     y = "Absolute Return (Volatility)",
     fill = "Category"
@@ -119,7 +119,7 @@ plot_ts <- ggplot(analysis_data, aes(x = date)) +
   theme_minimal() +
   labs(
     title = "ASML Volatility: Hard vs. Soft News",
-    subtitle = "Absolute daily returns show the intensity of information processing",
+    subtitle = "Absolute daily returns",
     x = "Date",
     y = "Volatility (Absolute Return)",
     fill = "Dominant News"
@@ -153,7 +153,7 @@ plot_bar <- ggplot(analysis_data, aes(x = date, y = abs_return, fill = main_info
   theme_minimal() +
   labs(
     title = "ASML Volatility Shocks: Hard vs. Soft News",
-    subtitle = "Daily absolute returns visualized as isolated market reactions",
+    subtitle = "Daily absolute returns",
     x = "Date",
     y = "Volatility (Absolute Return)",
     fill = "Dominant News"

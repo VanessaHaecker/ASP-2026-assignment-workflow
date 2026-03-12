@@ -114,7 +114,6 @@ plot_magnitude <- ggplot(analysis_data, aes(x = main_info_type, y = actual_retur
   scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
     title = "Return Distribution: Direction & Magnitude by News Type",
-    subtitle = "Violin plot shows density, points represent individual trading days",
     x = "Dominant News Type", 
     y = "Daily Return (Actual Return)", 
     color = "Daily Direction", 
